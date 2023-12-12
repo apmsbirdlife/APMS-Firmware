@@ -1,0 +1,15 @@
+[Unit]
+Description=Service running scales.py
+After=multi-user.target
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/home/apms/apms/
+User=apms
+Group=apms
+ExecStart=/usr/bin/python3 /home/apms/apms/scales.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
