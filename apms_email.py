@@ -22,7 +22,7 @@ CONFIG = {}
 
 
 #########################################################################################
-def email (message = "NO MESSAGE", attachment_abs_path = 0):
+def email (message = "NO MESSAGE", attachment_abs_path = None):
 
 	try:
 		CONFIG = load_config_file()
@@ -47,10 +47,10 @@ def email (message = "NO MESSAGE", attachment_abs_path = 0):
 
 		if message == "NO MESSAGE":
 			print (message)
-			print("Sending email without message")
+			print("Sending email")
 
 		if attachment_abs_path:
-			print("Sending attachment: {}".format(attachment_abs_path))
+			print("Sending email with attachment: {}".format(attachment_abs_path))
 			attachment = open(attachment_abs_path, "rb")
 			# instance of MIMEBase and named as p
 			p = MIMEBase('application', 'octet-stream')
@@ -62,7 +62,7 @@ def email (message = "NO MESSAGE", attachment_abs_path = 0):
 			# attach the instance 'p' to instance 'msg'
 			msg.attach(p)
 		else:
-			print("Sending email without attachment")  
+			print("Sending email")  
 
 		# creates SMTP session
 		s = smtplib.SMTP('smtp.gmail.com', 587)  

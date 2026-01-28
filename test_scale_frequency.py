@@ -1,3 +1,8 @@
+###############################################################################
+# This script can be used to test the configuretaion of the scales and 
+# to see at what frequency they are sampling
+###############################################################################
+
 import serial
 import time
 from datetime import datetime

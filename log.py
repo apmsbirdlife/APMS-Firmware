@@ -42,9 +42,11 @@ def main ():
 			date_time_obj = datetime.now()
 			break
 		else:
-			date_time_obj = datetime.strptime(response, input_format)
-			break
-
+			try:
+				date_time_obj = datetime.strptime(response, input_format)
+				break
+			except:
+				print("*** Not a valid date. Try again or press CTRL+C to exit. Press ENTER to use the current time.")
 
 	timestamp = date_time_obj.strftime(input_format)
 

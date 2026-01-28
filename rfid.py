@@ -75,7 +75,8 @@ def main ():
 				sys.exit()
 
 			except Exception as e:
-				print ("Could not decode BioMark message: {}".format(e))
+				print ("TAG: {} Could not decode BioMark message: {}".format(tag,e))
+
 		# If rfid_running is False, try and connect again
 		else:
 			setup()
@@ -103,7 +104,7 @@ def get_serial_port ():
 	ports = serial.tools.list_ports.comports()
 	for p in ports:
 		if (p.serial_number == CONFIG["RFID_SERIAL_NUMBER"]):
-			print("Serial port for RFID is {}".format(p.device)) 
+			# print("Serial port for RFID is {}".format(p.device)) 
 			serial_port_rfid = p.device
 ################################################################################
 

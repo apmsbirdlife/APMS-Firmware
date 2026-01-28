@@ -1,4 +1,5 @@
 // APMS System Monitor V1.0 December 2023
+// APMS System Monitor V1.1 January 2026
 // Developed by Pierre Retief
 // EEPROM: [0-12] holds mobile number of administrator
 
@@ -34,7 +35,7 @@ char rpi_command[100] = {0};
 size_t rpi_message_size = 0;
 
 unsigned long timer_start_ms = 0;
-unsigned long timer_val = 3; // number of seconds of timer, default 3
+unsigned long timer_val = 3; // number of seconds for timer, default 3
 int rpi_flag = 1; // rpi on
 char rpi_status[200] = {0};
 
@@ -64,11 +65,11 @@ void check_rpi (void);
 void read_pi (char rpi_message[200]);
 void pi_cmd_R (void);
 void pi_cmd_S (void);
-void pi_cmd_Q (char* rpi_message);
+void pi_cmd_Q (void);
 void pi_cmd_L (void);
 void pi_cmd_P (void);
 
-
+void clear_Serial1_buffer();
 
 void print_rpi_status_report (void);
 void start_timer(unsigned long sec);
@@ -136,9 +137,7 @@ void loop (void)
   get_temperature();
   check_temperature();
   
-  Serial.println("Checking voltages...");
   get_voltages();
-  
   check_voltages();
   check_button();
   check_rpi();
@@ -147,7 +146,17 @@ void loop (void)
   while(1)
   {
     get_temperature();
+    
+    ///////////////////////////////////////////////////////////////////////////////
+    check_temperature();
+    ///////////////////////////////////////////////////////////////////////////////
+
+
     get_voltages();
+    ///////////////////////////////////////////////////////////////////////////////
+    check_voltages();
+    ///////////////////////////////////////////////////////////////////////////////
+
     check_button();
     check_rpi();
     check_sms();
@@ -325,7 +334,7 @@ void update_date_time (void)
   //Serial.print(date_time);
   if (date_time[0] == '0')
   {
-    if (date_time[1] = '4')
+    if (date_time[1] == '4')
     {
       strcpy(date_time_formatted, "UNAVAILABLE");
       return;
@@ -432,10 +441,10 @@ void get_voltages (void)
   adc_24V =  analogRead(pin_24V);
   delay(10);
 
-  //Multipliers: (R1+R2)/R2 Tune these numbers for accuracy. 4V Does not use a voltage divider
-  float multiplier_5V  = 1.24;
-  float multiplier_12V  = 2.7;  
-  float multiplier_24V = 5.79;
+  //Multipliers: (R1+R2)/R2 4V Does not use a voltage divider
+  float multiplier_5V  = 1.25;
+  float multiplier_12V  = 2.79;  
+  float multiplier_24V = 5.82;
   
   float_4V  = (adc_4V/1023.0)*5.0;
   float_5V  = ((adc_5V/1023.0)*5.0)*multiplier_5V;
@@ -583,48 +592,43 @@ void check_rpi (void)
     //Serial1.println("rpi_message"); 
     //Serial1.println(rpi_message); 
 
-    //Check if the rpi is sending a command, acknowledge and reply
+    /* 
+    A command starts with the character '$' and ends with the character '@'
+    The middle character is the command. 
+      R: Request for a status report from the Monitor to the Pi
+      S: Request to send the Rpi report to the Monitor
+      Q: Rpi wants to send a sms
+      L: Rpi direct communication with SIM800L
+      C: Rpi is checking if there is a terminal command to be executed.
+    */
+    
+    //Check if the rpi is sending a command
     if (rpi_message[0] == '$') // Raspberry Pi command
-    {
-            
-      // Raspberry Pi is requesting status report from Arduino
+    {     
       if (rpi_message[1] == 'R')
       {
         pi_cmd_R();
       }
-      
-      
-      // Raspberry Pi wants to send its status report
       else if (rpi_message[1] == 'S')
       {
         pi_cmd_S();
       }
-
-      
-      // Raspberry Pi wants to send a sms
       else if (rpi_message[1] == 'Q')
       {
         pi_cmd_Q();
       }
-
-      
-      // Raspberry Pi requesting to communicate directly with SIM800L
       else if (rpi_message[1] == 'L')
       {
         pi_cmd_L();
       }
-      
-      // Print Rpi status report
       else if (rpi_message[1] == 'P')
       {
         pi_cmd_P();
       }
-
       else if (rpi_message[1] == 'C')
       {
         pi_cmd_C();        
       }
-    
       else
       {
         Serial.print("Unknown command - Received: "); 
@@ -644,7 +648,7 @@ void check_rpi (void)
 ///////////////////////////////////////////////////////////////////////////////
 void pi_cmd_R (void)
 {
-  // Raspberry Pi is requesting status report from Arduino
+  // Raspberry Pi is requesting status report from Monitor
   send_status_report();
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -665,10 +669,10 @@ void pi_cmd_S (void)
 ///////////////////////////////////////////////////////////////////////////////
 void pi_cmd_Q ()
 {  
-  char sms_message[200] = {0};
+  char sms_message_to_send[200] = {0};
   Serial1.println("ACK$Q");
-  read_pi(sms_message);
-  sms(sms_message);
+  read_pi(sms_message_to_send);
+  sms(sms_message_to_send);
 }
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -687,6 +691,8 @@ void pi_cmd_L (void)
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// For Debugging: To send the Rpi report back to the Rpi                     //
+///////////////////////////////////////////////////////////////////////////////
 void pi_cmd_P (void)
 {
   Serial1.println("Raspberry Pi Status Report:");
@@ -699,12 +705,19 @@ void pi_cmd_P (void)
 
 
 ///////////////////////////////////////////////////////////////////////////////
+// BETA: Will allow basic terminal commands to be sent to Pi via SMS         //
+///////////////////////////////////////////////////////////////////////////////
 void pi_cmd_C (void)
 {
+
+  // If the monitor has received a command for the Pi to execute, the flag will be set
+  // The command is stored in the 'rpi_command' global char array
   if (rpi_command_flag == 1)
+  {
     Serial1.println(rpi_command);
     memset(rpi_command, 0, sizeof(rpi_command));
     rpi_command_flag = 0;
+  }
 }
 ///////////////////////////////////////////////////////////////////////////////
  
@@ -716,7 +729,7 @@ void start_timer(unsigned long sec)
   timer_val = sec;
   timer_start_ms = millis();
 }
-
+///////////////////////////////////////////////////////////////////////////////
 int check_timer (void)
 {
   
@@ -1126,6 +1139,7 @@ void sms_alert (char* sms_alert_message)
 ///////////////////////////////////////////////////////////////////////////////
 
 
+//AT+CMGS="+27728391080"
 
 ///////////////////////////////////////////////////////////////////////////////
 // This function sends an sms

@@ -3,7 +3,7 @@
 ##############################################################################################
 
 from apms_email import email
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from time import sleep, perf_counter
 from vcgencmd import Vcgencmd
 import os
@@ -45,27 +45,40 @@ CONFIG = {}
 ###############################################################################
 def check_boot():
 	global boot, rpi_last_boot_obj
-	if len(sys.argv) == 2:
-		if (sys.argv[1] == "boot"):
-			print("Raspberry Pi just booted. Sending sms")
-			boot = 1
-			sleep(30)
-			sms("Raspberry Pi just booted...")
-	
-			last_boot_file_path = os.path.join(CONFIG["LOGS_PATH"], "rpi_last_boot.txt")
-			rpi_last_boot_obj = datetime.now()
-			# now_obj = datetime.now()
-			# rpi_last_boot = now_obj.strftime('%Y-%m-%d %H:%M:%S')
-			# rpi_last_boot_short = now_obj.strftime('%Y%m%d %H:%M')
+	last_boot_file_path = os.path.join(CONFIG["LOGS_PATH"], "rpi_last_boot.txt")
 
-			with open(last_boot_file_path, 'a') as file:
-				rpi_last_boot_string = rpi_last_boot_obj.strftime('%Y-%m-%d %H:%M:%S')
-				file.write(rpi_last_boot_string + '\n')
+	### The system_status_check script was called by the crontab at boot
+	if len(sys.argv) == 2 and sys.argv[1] == "boot":
+		print("Raspberry Pi just booted. Sending sms")
+		boot = 1
+		sleep(30)
+		sms("Raspberry Pi just booted...")
+
+		# Update system time
+		command = "/usr/bin/python3 /home/apms/apms/update_system_time.py >> /home/apms/logs/update_time.log 2>&1"
+		result = subprocess.run(command, shell=True, executable="/bin/bash", cwd="/home/apms")
+		if result.returncode == 0:
+			print("Time succesfully updated")
+		else:
+			print("Time not succesfully uploaded")
+
+		rpi_last_boot_obj = datetime.now()
+		with open(last_boot_file_path, 'a') as file:
+			rpi_last_boot_string = rpi_last_boot_obj.strftime('%Y-%m-%d %H:%M:%S')
+			file.write(rpi_last_boot_string + '\n')
+	
+	### If it is a new system, and there is no last_boot file, create one
+	if not os.path.exists(last_boot_file_path):
+		print ("Creating a last_boot file as it does not exist...")
+		rpi_last_boot_obj = datetime.now()
+		with open(last_boot_file_path, 'w') as file:
+			rpi_last_boot_string = rpi_last_boot_obj.strftime('%Y-%m-%d %H:%M:%S')
+			file.write(rpi_last_boot_string + '\n')
 ###############################################################################
 
 
 
-##############################################################################################
+###############################################################################
 def check_rpi_last_boot():
 	
 	global rpi_last_boot_obj
@@ -86,35 +99,48 @@ def check_rpi_last_boot():
 
 
 ###############################################################################
-def check_upload ():
-	
-	upload_file_path = os.path.join(CONFIG["LOGS_PATH"],'last_upload.txt')
-	
-	if not os.path.exists(upload_file_path):
-		print('last_upload.txt file not found.')
-		return 1
+# This script checks if the data was uploaded successfully, if not, it will try again
+
+###############################################################################
+def check_last_data_upload ():
+
+	busy_uploading_file_path = os.path.join(CONFIG["APMS_ABS_PATH"], 'busy_uploading')
+
+	if os.path.exists(busy_uploading_file_path):
+		print("System is currently busy uploading data to the cloud")
+		return
 
 	current_date_time_obj = datetime.now()
-	two_AM = time(2, 0)  # 2:00 AM
+	upload_hour = CONFIG["UPLOAD_HOUR"] 		
+	upload_hour_obj = datetime.combine(current_date_time_obj.date(), time(upload_hour, 0))
 
-	if current_date_time_obj.time() > two_AM:
-		pass
-		# print("It is after 2AM, check if upload was successful")
-	else:
-		return 1
+	upload_file_path = os.path.join(CONFIG["LOGS_PATH"],'last_upload.txt')
+	if not os.path.exists(upload_file_path):
+		print('last_upload.txt file not found.')
+		return
 	
-	try:
-		with open(upload_file_path, 'r') as file:
-			date_time_format = "%Y-%m-%d %H:%M:%S"
-			dates_times = file.readlines()
-			last_upload_date_time = dates_times[-1].strip()
-			last_upload_date_time_obj = datetime.strptime(last_upload_date_time, date_time_format)
+	with open(upload_file_path, 'r') as file: 
+		dates_times = file.readlines()
+		last_upload_date_time = dates_times[-1].strip()
+		last_upload_date_time_obj = datetime.strptime(last_upload_date_time, "%Y-%m-%d %H:%M:%S")
+		last_upload_day_obj = last_upload_date_time_obj.date()
+		current_day_obj = current_date_time_obj.date()
+		
+		print("Last Upload: ",last_upload_date_time)
 
-			last_upload_day_obj = last_upload_date_time_obj.date()
-			current_day_obj = current_date_time_obj.date()
+		time_since_upload_hour = current_date_time_obj - upload_hour_obj
+
+		# The data should have uploaded, if not, try again
+		if time_since_upload_hour > timedelta(hours=1):
+
+			time_since_last_upload = current_date_time_obj - last_upload_date_time_obj
+
+			# Example: If upload hour is 1:00, and it is currently 4am and the data has not transfered, then
+			# time_since_upload_hour is 3 and time_since_last_upload will be say 27 hours, then 
+			# it will try and upload agin
 			
-			print("Last Upload: ",last_upload_date_time)
-			if last_upload_day_obj < current_day_obj:
+			if time_since_last_upload > time_since_upload_hour:
+
 				print("The last time data was uploaded to the cloud was: ", last_upload_day_obj)
 				print("Running data_transfer script...")
 				command = "/usr/bin/python3 /home/apms/apms/transfer_data.py >> /home/apms/logs/transfer_data.log 2>&1"
@@ -124,9 +150,6 @@ def check_upload ():
 				else:
 					print("Data not succesfully uploaded")
 					return 1
-
-	except Exception as e:
-		print(e)
 ###############################################################################
 
 
@@ -169,7 +192,12 @@ def check_cpu_load():
 
 ##############################################################################################
 def check_throttle_state():
+
 	'''
+	These throttle states will be added to the throttle_states.txt file in the logs directory
+	The user will only be notified, when it occurs for the first time since last boot.
+	The user will also be notified if the thottling is still ongoing
+
 	Throttle states:
 	| 0 | Under-voltage detected |
 	| 1 | Arm frequency capped |
@@ -180,15 +208,16 @@ def check_throttle_state():
 	| 18 | Throttling has occurred |
 	| 19 | Soft temperature limit has occurred
 	'''
+
 	global alerts_list
+
 	try:
 		throttle_state = vcgencmd_object.get_throttled()
 
 		if int(throttle_state["raw_data"],0) == 0 :
 			pass
 		else:
-			# print("Some throttling issues detected. An alert has been triggered. See below")
-		
+
 			if throttle_state["breakdown"]["0"] == True:
 				print("** CPU is currently experiencing an under voltage condition")
 				alerts_list.append("** CPU is currently experiencing an under voltage condition")
@@ -205,6 +234,10 @@ def check_throttle_state():
 				print("** Soft temperature limit active")
 				alerts_list.append("** Soft temperature limit active")
 	
+			
+			# Since boot
+
+
 			if throttle_state["breakdown"]["16"] == True:
 				print("* The CPU has previously experienced an under-voltage condition (since boot)")
 				alerts_list.append("* The CPU has previously experienced an under-voltage condition (since boot)")
@@ -221,6 +254,7 @@ def check_throttle_state():
 			if throttle_state["breakdown"]["19"] == True:
 				print("* Soft temperature limit previously reached (since boot)")
 				alerts_list.append("* Soft temperature limit previously reached (since boot)")
+
 
 	except: 
 		print("Failure during check_throttle_state()")
@@ -291,6 +325,15 @@ def check_sd_used():
 	sd_usage = psutil.disk_usage('/')
 	sd_used_percentage = sd_usage[3]
 	print("uSD storage used: {}%".format(sd_used_percentage))
+
+	# stop all scripts as system will become unresponsive soon
+	if sd_used_percentage > 95:
+
+		print("SD Card too full. Stopping rfid and scales script")
+		stop_rfid_scales()
+		message = "SD Card almost full. RFID and Scales stopped. Please log in and clear space: {}%".format(sd_used_percentage)
+		sms(message)
+		alerts_list.append(message)
 ##############################################################################################
 
 
@@ -305,7 +348,11 @@ def check_usb_used():
 			usb_usage = psutil.disk_usage('/home/apms/flash')
 			usb_used_percentage = usb_usage[3]
 			print("USB drive storage used: {}%".format(usb_used_percentage))
-		
+			
+			if usb_used_percentage > 90:
+				print("USB Flash Drive too full.")
+				alerts_list.append("USB Flash Drive almost full: {}%".format(usb_used_percentage))
+	
 		else:
 			print("Could not determine space used on flash disk. ERROR: CUU1")
 			usb_used_percentage = 0
@@ -322,9 +369,10 @@ def check_memory_used():
 	memory = psutil.virtual_memory()
 	memory_used_percentage = memory.percent
 	print("Memory Used: {}%".format(memory_used_percentage))
-	if (memory_used_percentage > 80):
+	if (memory_used_percentage > 70):
 		print("Low memory")
-		alerts_list.append("Low memory")
+		alerts_list.append("Low memory - Memory Used: {}%".format(memory_used_percentage))
+
 ##############################################################################################
 
 
@@ -378,15 +426,19 @@ def request_monitor_status_report():
 
 ##############################################################################################
 def sms(message):
-	internal_serial_object.write('$Q@'.encode('ascii'))
-	sleep(4)
-	response = (internal_serial_object.readline().decode('ascii')).strip()
-	print ("Response was: {}".format(response))
-	if (response == 'ACK$Q'): # ACK$S means the Monitor acknowledged and is waiting for sms message
-		print ("Sending sms")
-		internal_serial_object.write(message.encode('ascii'))
-		internal_serial_object.write(message.encode('@'))
-		print("sms message sent to monitor...")
+	try:
+		internal_serial_object.write('$Q@'.encode('ascii'))
+		sleep(4)
+		response = (internal_serial_object.readline().decode('ascii')).strip()
+		print ("Response was: {}".format(response))
+		if (response == 'ACK$Q'): # ACK$S means the Monitor acknowledged and is waiting for sms message
+			print ("Sending sms")
+			internal_serial_object.write(message.encode('ascii'))
+			internal_serial_object.write('@'.encode('ascii'))
+			print("sms message sent to monitor...")
+
+	except Exception as e:
+		print("Failure sending sms: ",message)
 ##############################################################################################
 
 
@@ -461,7 +513,7 @@ def connect_monitor ():
 
 
 ###############################################################################
-def save_data_to_file ():
+def save_status_data_to_file ():
 	global alerts_list, _time, day
 	system_status_report = ''
 
@@ -521,6 +573,12 @@ def if_not_then_make (path):
         os.makedirs(path)
 ###############################################################################
 
+def stop_rfid_scales ():
+	print("Stopping the scales script")
+	subprocess.run(["sudo", "systemctl", "stop", "scales"],text=True)  # Ensures the output is returned as a string)
+	print("Stopping the rfid script")
+	subprocess.run(["sudo", "systemctl", "stop", "rfid"],text=True)  # Ensures the output is returned as a string)
+			
 
 
 ###############################################################################
@@ -545,7 +603,7 @@ print (  "############################################################\n")
 connect_monitor()
 check_boot()
 check_rpi_last_boot()
-check_upload()
+check_last_data_upload()
 check_cpu_temp()
 check_cpu_load()
 check_memory_used()
@@ -559,7 +617,7 @@ check_internet()
 check_command_from_monitor()
 request_monitor_status_report()
 send_rpi_status_report()
-save_data_to_file()
+save_status_data_to_file()
 
 
 now = datetime.now()
