@@ -196,7 +196,7 @@ void program_new_mobile_number(const char* number)
   for (i=0 ; i < 12 ; i++)
   {
     EEPROM.write(i, number[i]);
-    delay(1000);
+    delay(100);
   }
   Serial.println("Done");
   // Serial.println("Done. Reading back from EEPROM....");
@@ -278,6 +278,7 @@ int setup_SIM800L (void)
       k++;
     }
   }
+  return 0;
 }
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -442,9 +443,9 @@ void get_voltages (void)
   delay(10);
 
   //Multipliers: (R1+R2)/R2 4V Does not use a voltage divider
-  float multiplier_5V  = 1.25;
-  float multiplier_12V  = 2.79;  
-  float multiplier_24V = 5.82;
+  float multiplier_5V  = 1.23;
+  float multiplier_12V  = 2.67;  
+  float multiplier_24V = 5.65;
   
   float_4V  = (adc_4V/1023.0)*5.0;
   float_5V  = ((adc_5V/1023.0)*5.0)*multiplier_5V;
@@ -885,8 +886,8 @@ void check_sms (void)
       {
         if (response[5] == 'T')
         {
-          Serial1.println("SMS received");
-          Serial1.println(response);
+          //Serial1.println("SMS received");
+          //Serial1.println(response);
   
           if (response[50] == 'C' || response[50] == 'c')
           {
@@ -896,8 +897,8 @@ void check_sms (void)
               {
                 if (response[53] == ':')
                 {
-                  Serial1.print("Command received: ");
-                  Serial1.println(response[54]);
+                  //Serial1.print("Command received: ");
+                  //Serial1.println(response[54]);
                   if (response[54] == 'R' || response[54] == 'r')
                   {
                     cmd_R();
@@ -978,17 +979,17 @@ void cmd_R()
 void cmd_U(char* response)
 {
 
-  Serial1.print("BEFORE: boot time formatted: ");
-  Serial1.println(boot_time_formatted);
-  Serial1.print("BEFORE: date time formatted: ");
-  Serial1.println(date_time_formatted);
+  //Serial1.print("BEFORE: boot time formatted: ");
+  //Serial1.println(boot_time_formatted);
+  //Serial1.print("BEFORE: date time formatted: ");
+  //Serial1.println(date_time_formatted);
   
   update_date_time();
   
-  Serial1.print("AFTER: boot time formatted: ");
-  Serial1.println(boot_time_formatted);
-  Serial1.print("After: date time formatted: ");
-  Serial1.println(date_time_formatted);
+  //Serial1.print("AFTER: boot time formatted: ");
+  //Serial1.println(boot_time_formatted);
+  //Serial1.print("After: date time formatted: ");
+  //Serial1.println(date_time_formatted);
 }
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -1071,7 +1072,7 @@ void cmd_C (char* response)
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// Note: If this function is not working properly, ensure the RX buffer size has been increased (use 200)
+// Note: If this function is not working properly, ensure the RX buffer size has been increased (use 100)
 
 void sms_status_report (void)
 {
@@ -1164,7 +1165,7 @@ void sms (char* sms_message)
   
   delay(10000);
   clear_SIM800L_buffer();        
-  Serial1.println("sms sent");
+  //Serial1.println("sms sent");
 }
 ///////////////////////////////////////////////////////////////////////////////
 

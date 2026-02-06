@@ -48,11 +48,17 @@ def upload_log_file():
 			print("Could not upload log backup files to the cloud")
 		else:
 			print("Uploaded log backup files to the cloud succesfully")
+	else:
+		print("No log backup directory to upload")
+
 
 	if os.path.exists(file_path):
 		print("Uploading current log file...")
 
 		command = "aws s3 cp {} {}".format(file_path, CONFIG["AWS_S3_DATA_PATH"])
+		
+		print(command)
+
 		completed_process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 		exit_code = completed_process.returncode
 		
@@ -215,10 +221,9 @@ try:
 	email_message = "APMS Data Transfer Report for: {} \n".format(CONFIG["SITE_NAME"])
 
 	if (CONFIG["UPLOAD"] == 0):
-		print ("--------- Configuration file set to not upload or back up to USB  -------")
+		print ("--------- Configuration file set to not upload or back up to USB -------")
 		print("Goodbye")
 		sys.exit()
-
 
 	if (check_usb() == 0):
 		if (data_transfer_USB() == 0):
@@ -247,6 +252,7 @@ try:
 			save_upload_timestamp()
 			print (message)
 			email_message = email_message + message
+
 		else:
 			message = "System is connected to the internet but data transfer to the cloud failed.\n"
 			print (message)
@@ -276,6 +282,7 @@ except Exception as e:
 	email("A problem occured while running the transfer_data.py script on {}. Error: {}".format(CONFIG["SITE_NAME"], e))
 	os.system("rm ~/apms/busy_uploading")
 	sys.exit()
+
 ###############################################################################
 # END 
 ###############################################################################

@@ -1,6 +1,7 @@
 ###############################################################################
 # This script is used to update the system time
 # The script first checks the scales_busy file to see if a scale event is happening
+# This script is run by the crontab, once a week. 
 ###############################################################################
 import time
 import os

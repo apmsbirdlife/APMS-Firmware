@@ -107,10 +107,18 @@ def ping_internet ():
 # Ping the router
 ###############################################################################
 def ping_router():
-	router_ping_response = os.system("ping -c 1 192.168.0.1 > /dev/null 2>&1")
+	router_ping_response = os.system("ping -c 1 192.168.1.1 > /dev/null 2>&1")
 	sleep(5)
 	if router_ping_response == 0:
 		return 0		
 	else:
 		return 1		
+###############################################################################
+
+
+
+###############################################################################
+def if_not_then_make (path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 ###############################################################################

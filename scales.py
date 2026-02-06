@@ -129,11 +129,11 @@ def update_weight_lists (scale_1, scale_2):
 	serial_buffer_1 = scale_1.serial_object.in_waiting
 	serial_buffer_2 = scale_2.serial_object.in_waiting
 	if serial_buffer_1 > scale_1.serial_buffer_max:
-		if serial_buffer_1 > 16 and scale_1.active == True:
+		if serial_buffer_1 > CONFIG["SCALE_WORD_LENGTH"]*2 and scale_1.active == True:
 			print("Serial Buffer 1 Increase: ", serial_buffer_1)
 		scale_1.serial_buffer_max = serial_buffer_1
 	if serial_buffer_2 > scale_2.serial_buffer_max:
-		if serial_buffer_2 > 16 and scale_2.active == True:
+		if serial_buffer_2 > CONFIG["SCALE_WORD_LENGTH"]*2 and scale_2.active == True:
 			print("Serial Buffer 2 Increase: ", serial_buffer_2)
 		scale_2.serial_buffer_max = serial_buffer_2
 
@@ -144,11 +144,11 @@ def update_weight_lists (scale_1, scale_2):
 	# Balance the serial buffers. One scale always reads a bit faster than the other, causing imbalance
 	if scale_1.active == True and scale_2.active == True:
 		
-		if scale_1.serial_object.in_waiting < 8 and scale_2.serial_object.in_waiting > 8:
+		if scale_1.serial_object.in_waiting < CONFIG["SCALE_WORD_LENGTH"] and scale_2.serial_object.in_waiting > CONFIG["SCALE_WORD_LENGTH"]:
 			print("Clearing byte from scale 2 serial buffer")
 			scale_2.serial_object.readline()
 
-		elif scale_2.serial_object.in_waiting < 8 and scale_1.serial_object.in_waiting > 8:
+		elif scale_2.serial_object.in_waiting < CONFIG["SCALE_WORD_LENGTH"] and scale_1.serial_object.in_waiting > CONFIG["SCALE_WORD_LENGTH"]:
 			print("Clearing byte from scale 1 serial buffer")
 			scale_1.serial_object.readline()
 ###############################################################################
@@ -159,15 +159,31 @@ def update_weight_lists (scale_1, scale_2):
 ###############################################################################
 def read_scale (scale, timestamp):
 	if scale.active == True:
-		try:
-			weight_bytes = scale.serial_object.readline()
-			
-			### Added 5 Oct 2025 ###
-			weight_bytes = weight_bytes.replace(b"\x00", b"")
 
-			weight = int(weight_bytes.strip().decode())
-			scale.weight_list.append((timestamp, weight/1000))
-			return 0
+		try:
+
+			if CONFIG["SCALE_TYPE"] == "TLB4":
+
+				weight_bytes = scale.serial_object.readline()
+				
+				### Added 5 Oct 2025 ###
+				weight_bytes = weight_bytes.replace(b"\x00", b"")
+
+				weight = int(weight_bytes.strip().decode())
+				scale.weight_list.append((timestamp, weight/1000))
+				return 0
+
+	
+			if CONFIG["SCALE_TYPE"] == "GMT-X1":
+
+				weight_data = scale.serial_object.readline().decode('ascii')
+				weight_ascii = weight_data[weight_data.index("kg")-8:weight_data.index("kg")]
+				weight_ascii = weight_ascii.replace(" ","")
+			
+				weight = float(weight_ascii)
+
+				scale.weight_list.append((timestamp, weight))
+				return 0
 
 		except Exception as e:
 			

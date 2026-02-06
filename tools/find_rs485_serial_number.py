@@ -1,5 +1,4 @@
 import sys
-import os.path
 import serial.tools.list_ports
 
 print("Welcome to the RS485 SN Identification Tool")

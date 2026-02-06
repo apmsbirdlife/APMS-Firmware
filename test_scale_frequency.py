@@ -30,14 +30,16 @@ def setup_scales ():
 	scale_1_serial_object = serial.Serial(port = scale_1_serial_port, baudrate = CONFIG['SCALE_BAUD_RATE'], timeout = 1)
 	scale_2_serial_object = serial.Serial(port = scale_2_serial_port, baudrate = CONFIG['SCALE_BAUD_RATE'], timeout = 1)
 
-	frequency_scale_1 = check_frequency(scale_1_serial_object)
+	time.sleep(2)
+
+
+#	frequency_scale_1 = check_frequency(scale_1_serial_object)
+	frequency_scale_1 = check_frequency_GMT_X1(scale_1_serial_object)
 	print("Average Frequency Scale 1: {:.1f} Hz ".format(frequency_scale_1))
 
-	frequency_scale_2 = check_frequency(scale_2_serial_object)
+#	frequency_scale_2 = check_frequency(scale_2_serial_object)
+	frequency_scale_2 = check_frequency_GMT_X1(scale_2_serial_object)
 	print("Average Frequency Scale 2: {:.1f} Hz ".format(frequency_scale_2))
-
-
-
 
 
 
@@ -59,8 +61,40 @@ def check_frequency (scale_serial_object):
 		# print("Average", frequency_avg)
 
 	return frequency_avg
+###############################################################################
+
+
+
 
 ###############################################################################
+def check_frequency_GMT_X1 (scale_serial_object):
+
+	# print("scale_serial_object.in_waiting: ",scale_serial_object.in_waiting)
+
+	while (scale_serial_object.in_waiting > 0):
+		#sleep(0.005)
+		#print("scale_serial_object.in_waiting: ",scale_serial_object.in_waiting)
+		scale_serial_object.readline()
+
+	# print("scale_serial_object.in_waiting: ",scale_serial_object.in_waiting)
+
+	time_start = datetime.now().timestamp()
+	for i in range (1,1000):
+	
+		scale_serial_object.readline()
+		time_now = datetime.now().timestamp()
+		total_time_till_now = time_now - time_start
+		delta_t_avg = total_time_till_now / i
+		frequency_avg = 1/delta_t_avg
+		# print("Average", frequency_avg)
+
+	# print("scale_serial_object.in_waiting: ",scale_serial_object.in_waiting)
+	return frequency_avg
+
+###############################################################################
+
+
+
 
 CONFIG = load_config_file()
 setup_scales()

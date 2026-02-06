@@ -1,5 +1,8 @@
+#!/usr/bin/python3
+
 # This script does a system check every hour and sends an email if an alert is raised
 # It also checks in with the monitor to get a status report
+# This script is also called by the crontab at boot
 ##############################################################################################
 
 from apms_email import email
@@ -12,7 +15,7 @@ import sys
 import psutil
 import subprocess
 from shared_functions import *
-
+ 
 ###############################################################################
 # Global variables dictionary
 ###############################################################################
@@ -33,47 +36,55 @@ sd_used_percentage = 0
 usb_used_percentage = 0
 scales_running = 'N'
 rfid_running = 'N'
-tmate_running = 'N'
+tailscale_running = 'N'
 internet_on = 'N'
 boot = 0
-rpi_last_boot_obj = 0
+rpi_last_boot_obj = datetime(1970,1,1)
 CONFIG = {}
 ###############################################################################
 
 
 
 ###############################################################################
+# At boot, the crontab calls this script with the argument "boot"
+# It is assumed the system has rebooted after losing power.
+###############################################################################
 def check_boot():
-	global boot, rpi_last_boot_obj
-	last_boot_file_path = os.path.join(CONFIG["LOGS_PATH"], "rpi_last_boot.txt")
-
-	### The system_status_check script was called by the crontab at boot
-	if len(sys.argv) == 2 and sys.argv[1] == "boot":
-		print("Raspberry Pi just booted. Sending sms")
-		boot = 1
-		sleep(30)
-		sms("Raspberry Pi just booted...")
-
-		# Update system time
-		command = "/usr/bin/python3 /home/apms/apms/update_system_time.py >> /home/apms/logs/update_time.log 2>&1"
-		result = subprocess.run(command, shell=True, executable="/bin/bash", cwd="/home/apms")
-		if result.returncode == 0:
-			print("Time succesfully updated")
-		else:
-			print("Time not succesfully uploaded")
-
-		rpi_last_boot_obj = datetime.now()
-		with open(last_boot_file_path, 'a') as file:
-			rpi_last_boot_string = rpi_last_boot_obj.strftime('%Y-%m-%d %H:%M:%S')
-			file.write(rpi_last_boot_string + '\n')
 	
-	### If it is a new system, and there is no last_boot file, create one
-	if not os.path.exists(last_boot_file_path):
-		print ("Creating a last_boot file as it does not exist...")
+	global boot, rpi_last_boot_obj
+
+	if len(sys.argv) == 2 and sys.argv[1] == "boot":
+
+		# Set the boot flag
+		boot = 1
+
+		print("Raspberry Pi just booted...")
+		sms("Raspberry Pi just booted...")
+		
+		# If the rpi has rebooted, there is a good chance power was lost and the system
+		# time will be incorrect, thus first update the system time
+		# Wait for the router to go online. This can be improved with code that checks when internet is available
+		sleep(30)
+	
+		print("Updating system time. Time before update: ", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+		print(os.system("sudo ntpdate pool.ntp.org"))
+		print("Time after update: ", datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
+		if_not_then_make(CONFIG["LOGS_PATH"])
+		last_boot_file_path = os.path.join(CONFIG["LOGS_PATH"], "rpi_last_boot.txt")
+
+		### Log the boot time. If the last_boot file does not exist, create it.
 		rpi_last_boot_obj = datetime.now()
-		with open(last_boot_file_path, 'w') as file:
-			rpi_last_boot_string = rpi_last_boot_obj.strftime('%Y-%m-%d %H:%M:%S')
-			file.write(rpi_last_boot_string + '\n')
+		rpi_last_boot_string = rpi_last_boot_obj.strftime('%Y-%m-%d %H:%M:%S')
+		if os.path.exists(last_boot_file_path):
+			with open(last_boot_file_path, 'a') as file:
+				file.write(rpi_last_boot_string + '\n')
+		else:	
+			print ("Creating a last_boot file")
+			with open(last_boot_file_path, 'w') as file:
+				file.write(rpi_last_boot_string + '\n')
+
+		print ("last_boot file updated")
 ###############################################################################
 
 
@@ -99,9 +110,9 @@ def check_rpi_last_boot():
 
 
 ###############################################################################
-# This script checks if the data was uploaded successfully, if not, it will try again
-
+# This script checks if the data was uploaded successfully, if not, it will try againn
 ###############################################################################
+###################################################################################################################################
 def check_last_data_upload ():
 
 	busy_uploading_file_path = os.path.join(CONFIG["APMS_ABS_PATH"], 'busy_uploading')
@@ -180,6 +191,7 @@ def check_cpu_temp():
 
 
 
+
 ##############################################################################################
 def check_cpu_load():
 	global cpu_percentage
@@ -215,6 +227,7 @@ def check_throttle_state():
 		throttle_state = vcgencmd_object.get_throttled()
 
 		if int(throttle_state["raw_data"],0) == 0 :
+			print("No throttling")
 			pass
 		else:
 
@@ -264,43 +277,45 @@ def check_throttle_state():
 
 
 ##############################################################################################
-def check_scales():
+def check_scales_script():
 	global scales_running
 	status = os.system('systemctl is-active --quiet scales')
 	if status == 0:
 		scales_running = 'Y'
 	else:
 		scales_running = 'N'
-		print("Scales not running")
+		print("* Scales not running")
 		alerts_list.append("Scales not running")
 ##############################################################################################
 
 
 
 ##############################################################################################
-def check_rfid():
+# Check if the RFID script is running
+def check_rfid_script():
 	global rfid_running
 	status = os.system('systemctl is-active --quiet rfid')
 	if status == 0:
 		rfid_running = 'Y'
 	else:
 		rfid_running = 'N'
-		print("RFID not running")
+		print("* RFID not running")
 		alerts_list.append("RFID not running")
 ##############################################################################################
 
 
 
 ##############################################################################################
-def check_tmate():
-	global tmate_running
-	status = os.system('systemctl is-active --quiet tmate')
+def check_tailscale():
+	global tailscale_running
+	status = os.system('systemctl is-active --quiet tailscaled')
 	if status == 0:
-		tmate_running = 'Y'
+		tailscale_running = 'Y'
+		print("tailscale is running")
 	else:
-		tmate_running = 'N'
-		print("tmate not running")
-		alerts_list.append("tmate not running")
+		tailscale_running = 'N'
+		print("* tailscale not running")
+		alerts_list.append("tailscale not running")
 ##############################################################################################
 
 
@@ -313,7 +328,6 @@ def check_internet():
 		internet_on = 'Y'
 	else:
 		internet_on = 'N'
-		print("Internet not connected")
 ##############################################################################################
 
 
@@ -321,7 +335,6 @@ def check_internet():
 ##############################################################################################
 def check_sd_used():
 	global sd_used_percentage
-
 	sd_usage = psutil.disk_usage('/')
 	sd_used_percentage = sd_usage[3]
 	print("uSD storage used: {}%".format(sd_used_percentage))
@@ -376,12 +389,16 @@ def check_memory_used():
 ##############################################################################################
 
 
-
+# TEST THIS
 ##############################################################################################
+# Reminder: The Pi starts a command with $ and ends it with a @
+
 def check_command_from_monitor():
 	print("Checking command request from Monitor")
 	internal_serial_object.write('$C@'.encode())
 	sleep(2)
+
+	# Wait for the monitor to send the command, if there was one
 
 	if internal_serial_object.in_waiting > 0:
 		while (internal_serial_object.in_waiting > 0):
@@ -435,7 +452,6 @@ def sms(message):
 			print ("Sending sms")
 			internal_serial_object.write(message.encode('ascii'))
 			internal_serial_object.write('@'.encode('ascii'))
-			print("sms message sent to monitor...")
 
 	except Exception as e:
 		print("Failure sending sms: ",message)
@@ -454,7 +470,7 @@ def send_rpi_status_report():
 		sleep(4)
 
 		response = (internal_serial_object.readline().decode('ascii')).strip()
-		print ("Response was: {}".format(response))
+		# print ("Response was: {}".format(response))
 		if (response == 'ACK$S'): # ACK$S means the Monitor acknowledged and is waiting for report
 			print ("Sending Raspberry Pi Status Report")
 
@@ -465,7 +481,7 @@ def send_rpi_status_report():
 			CH = datetime.now().strftime('%Y%m%d %H:%M')
 
 			message = "{}\nBT:{}\nCH:{}\nS:{}\nR:{}\nT:{}\nI:{}\nCPU:{}\nMEM:{}\nSD:{}\nUSB:{}".format(
-				CONFIG["SITE_CODE"],BT,CH,scales_running,rfid_running,tmate_running,internet_on,cpu_temp,memory_used_percentage,sd_used_percentage,usb_used_percentage)
+				CONFIG["SITE_CODE"],BT,CH,scales_running,rfid_running,tailscale_running,internet_on,cpu_temp,memory_used_percentage,sd_used_percentage,usb_used_percentage)
 			internal_serial_object.write((message + "@").encode())
 			print(message)
 			print("--------------------------------------------")
@@ -567,12 +583,9 @@ def save_status_data_to_file ():
 
 
 
-###############################################################################
-def if_not_then_make (path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-###############################################################################
 
+
+###############################################################################
 def stop_rfid_scales ():
 	print("Stopping the scales script")
 	subprocess.run(["sudo", "systemctl", "stop", "scales"],text=True)  # Ensures the output is returned as a string)
@@ -581,20 +594,36 @@ def stop_rfid_scales ():
 			
 
 
+
+###############################################################################
+# Run the update_system_time.py script to update the system time
+###############################################################################
+def update_system_time():
+	command = "/usr/bin/python3 /home/apms/apms/update_system_time.py >> /home/apms/logs/update_time.log 2>&1"
+	result = subprocess.run(command, shell=True, executable="/bin/bash", cwd="/home/apms")
+	if result.returncode == 0:
+		print("Time succesfully updated")
+	else:
+		print("Time not succesfully uploaded")
+
+
+
+
 ###############################################################################
 # START 
 ###############################################################################
 CONFIG = load_config_file()
-try:
-	data_dir = os.path.join(CONFIG["DATA_PATH"], year, day)
-	os.makedirs(data_dir)
-except FileExistsError:
-	print("Status data directory found. {}".format(data_dir))
+
+# Get the name of the data directory and try to create it. 
+# If it exists, give an error message and exit
+data_dir = os.path.join(CONFIG["DATA_PATH"], year, day)
+
+if os.path.isdir(data_dir):
+	print("Data directory found")
 else:
-	print("Status data directory created. {}".format(data_dir))
+	os.makedirs(data_dir)
+	print("Data directory created. {}".format(data_dir))
 
-
-os.system('clear')
 print ("\n############################################################")
 print (  "############         APMS Status Report          ###########")
 print (  "############ Date: {}	  Time: {} ###########".format(day,_time))
@@ -610,15 +639,14 @@ check_memory_used()
 check_sd_used()
 check_usb_used()
 check_throttle_state()
-check_scales()
-check_rfid()
-check_tmate()
+check_scales_script()
+check_rfid_script()
+check_tailscale()
 check_internet()
 check_command_from_monitor()
 request_monitor_status_report()
 send_rpi_status_report()
 save_status_data_to_file()
-
 
 now = datetime.now()
 _time = now.strftime("%H:%M:%S")
@@ -633,3 +661,4 @@ sys.exit()
 ###############################################################################
 # END 
 ###############################################################################
+
