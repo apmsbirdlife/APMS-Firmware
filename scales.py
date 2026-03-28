@@ -143,7 +143,7 @@ def update_weight_lists (scale_1, scale_2):
 
 	# Balance the serial buffers. One scale always reads a bit faster than the other, causing imbalance
 	if scale_1.active == True and scale_2.active == True:
-		
+
 		if scale_1.serial_object.in_waiting < CONFIG["SCALE_WORD_LENGTH"] and scale_2.serial_object.in_waiting > CONFIG["SCALE_WORD_LENGTH"]:
 			print("Clearing byte from scale 2 serial buffer")
 			scale_2.serial_object.readline()
@@ -165,7 +165,7 @@ def read_scale (scale, timestamp):
 			if CONFIG["SCALE_TYPE"] == "TLB4":
 
 				weight_bytes = scale.serial_object.readline()
-				
+
 				### Added 5 Oct 2025 ###
 				weight_bytes = weight_bytes.replace(b"\x00", b"")
 
@@ -173,13 +173,18 @@ def read_scale (scale, timestamp):
 				scale.weight_list.append((timestamp, weight/1000))
 				return 0
 
-	
+
 			if CONFIG["SCALE_TYPE"] == "GMT-X1":
 
-				weight_data = scale.serial_object.readline().decode('ascii')
-				weight_ascii = weight_data[weight_data.index("kg")-8:weight_data.index("kg")]
+				weight_bytes = scale.serial_object.readline()
+
+				### Added 3 Mar 2026 ###
+				weight_bytes = weight_bytes.replace(b"\x00", b"")
+
+				weight_ascii = weight_bytes.decode('ascii')
+				weight_ascii = weight_ascii[weight_ascii.index("kg")-8:weight_ascii.index("kg")]
 				weight_ascii = weight_ascii.replace(" ","")
-			
+
 				weight = float(weight_ascii)
 
 				scale.weight_list.append((timestamp, weight))
